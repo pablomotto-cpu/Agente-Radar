@@ -1,0 +1,32 @@
+name: Collect Rosario Headlines
+
+on:
+  schedule:
+    # Corre todos los días a las 07:00 ART aprox.
+    # GitHub usa UTC; 07:00 ART = 10:00 UTC (sin DST).
+    - cron: '0 10 * * *'
+  workflow_dispatch: {}   # permite ejecutar manualmente
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install feedparser
+
+      - name: Run collector
+        run: python collect_rosario.py
+
+      - name: Save artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rosario-headlines
+          path: out/rosario_headlines.json
