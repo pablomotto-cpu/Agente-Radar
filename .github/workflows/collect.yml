@@ -1,32 +1,60 @@
-name: Collect Rosario Headlines
+name: Recolección diaria Radar Rosario
 
 on:
   schedule:
-    # Corre todos los días a las 07:00 ART aprox.
-    # GitHub usa UTC; 07:00 ART = 10:00 UTC (sin DST).
-    - cron: '0 10 * * *'
-  workflow_dispatch: {}   # permite ejecutar manualmente
+    # Corre todos los días hábiles a las 07:00 hora Argentina (10:00 UTC)
+    - cron: "0 10 * * 1-5"
+  workflow_dispatch: {}  # Permite ejecutarlo manualmente
 
 jobs:
   run:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
+      - name: Clonar el repositorio
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Configurar Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install deps
-        run: pip install feedparser
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install feedparser requests
 
-      - name: Run collector
+      - name: Ejecutar recolector
         run: python collect_rosario.py
 
-      - name: Save artifact
+      - name: Guardar resultado como artefacto
         uses: actions/upload-artifact@v4
         with:
           name: rosario-headlines
           path: out/rosario_headlines.json
+
+      - name: Enviar datos al agente Radar Rosario
+        env:
+          AGENT_API_URL: ${{ secrets.AGENT_API_URL }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+        run: |
+          if [ -f out/rosario_headlines.json ]; then
+            echo "Enviando titulares al agente Radar Rosario..."
+            http_code=$(curl -s -o response.txt -w "%{http_code}" \
+              -X POST "$AGENT_API_URL" \
+              -H "Authorization: Bearer $AGENT_API_KEY" \
+              -H "Content-Type: application/json" \
+              --data-binary "@out/rosario_headlines.json")
+
+            echo "Respuesta HTTP: $http_code"
+            echo "Respuesta del servidor:"
+            cat response.txt
+
+            if [ "$http_code" -ge 400 ]; then
+              echo "Error al enviar los datos (HTTP $http_code)"
+              exit 1
+            fi
+          else
+            echo "⚠️ No se encontró el archivo out/rosario_headlines.json"
+            exit 1
+          fi
